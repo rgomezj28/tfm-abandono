@@ -13,12 +13,13 @@ from xgboost import XGBClassifier
 from imblearn.over_sampling import SMOTE
 import shap
 
-st.set_page_config(page_title="Sistema de Prediccion de Abandono Escolar",
+st.set_page_config(page_title="Sistema de Predicción de Abandono Escolar",
                    layout="wide")
 
-# Colores semaforo consistentes en toda la app
 COL = {"Dropout": "#c0392b", "Enrolled": "#f39c12", "Graduate": "#27ae60"}
+plt.rcParams.update({"font.size": 8, "axes.titlesize": 9, "figure.dpi": 110})
 
+# Traduccion de nombres de variables a castellano (solo para mostrar)
 TRAD = {
     "Curricular units 2nd sem (approved)": "Unidades aprobadas (2º semestre)",
     "Curricular units 1st sem (approved)": "Unidades aprobadas (1er semestre)",
@@ -57,10 +58,14 @@ TRAD = {
     "Daytime/evening attendance": "Asistencia diurna/nocturna",
     "Educational special needs": "Necesidades educativas especiales",
 }
+TRAD_CLASE = {"Dropout": "Abandono", "Enrolled": "Matriculado", "Graduate": "Graduado"}
+
 def trad(nombre):
     return TRAD.get(nombre, nombre)
 
-plt.rcParams.update({"font.size": 8, "axes.titlesize": 9, "figure.dpi": 110})
+def trad_clase(c):
+    return TRAD_CLASE.get(c, c)
+
 
 # ------------------------------------------------------------------
 # Carga de datos, preprocesamiento y entrenamiento (una sola vez)
@@ -94,10 +99,10 @@ def preparar_todo():
         proba = modelo.predict_proba(X_te)
         return {
             "F1-score macro": round(f1_score(y_te, pred, average="macro"), 2),
-            "Recall Dropout": round(recall_score(y_te, pred, labels=[idx_dp],
-                                                  average="macro"), 2),
-            "Precision Dropout": round(precision_score(y_te, pred, labels=[idx_dp],
-                                                       average="macro"), 2),
+            "Recall Abandono": round(recall_score(y_te, pred, labels=[idx_dp],
+                                                   average="macro"), 2),
+            "Precisión Abandono": round(precision_score(y_te, pred, labels=[idx_dp],
+                                                        average="macro"), 2),
             "AUC-ROC": round(roc_auc_score(y_te, proba, multi_class="ovr",
                                            average="macro"), 2),
         }
@@ -140,49 +145,50 @@ def shap_local(modelo, nombre, x_esc):
         expl = shap.KernelExplainer(
             lambda d: modelo.predict_proba(d)[:, D["idx_dp"]], fondo)
         vals = expl.shap_values(x_esc, nsamples=100)[0]
-    return pd.Series(vals, index=cols).sort_values(key=abs, ascending=False).head(6)
+    serie = pd.Series(vals, index=[trad(c) for c in cols])
+    return serie.sort_values(key=abs, ascending=False).head(6)
 
 
 # ------------------------------------------------------------------
 # Barra lateral
 # ------------------------------------------------------------------
-st.sidebar.title("Sistema de Prediccion de Abandono Escolar")
+st.sidebar.title("Sistema de Predicción de Abandono Escolar")
 st.sidebar.markdown("---")
-st.sidebar.subheader("Navegacion")
+st.sidebar.subheader("Navegación")
 seccion = st.sidebar.radio(
-    "Seccion",
-    ["Exploracion de datos", "Prediccion", "Explicabilidad", "Comparativa de modelos"],
+    "Sección",
+    ["Exploración de datos", "Predicción", "Explicabilidad", "Comparativa de modelos"],
     label_visibility="collapsed")
 st.sidebar.markdown("---")
-st.sidebar.subheader("Configuracion del modelo")
+st.sidebar.subheader("Configuración del modelo")
 modelo_sel = st.sidebar.selectbox(
-    "Modelo de prediccion",
+    "Modelo de predicción",
     ["Random Forest", "XGBoost", "MLP — Red Neuronal"])
 st.sidebar.markdown("---")
-st.sidebar.caption("TFM — Prediccion temprana del abandono escolar")
+st.sidebar.caption("TFM — Predicción temprana del abandono escolar")
 
 
 # ==================================================================
-# SECCION 1: EXPLORACION DE DATOS
+# SECCIÓN 1: EXPLORACIÓN DE DATOS
 # ==================================================================
-if seccion == "Exploracion de datos":
-    st.title("Exploracion de datos")
+if seccion == "Exploración de datos":
+    st.title("Exploración de datos")
     st.write(f"Conjunto de datos de Realinho et al. (2022). "
              f"Registros: {D['X'].shape[0]} | Variables: {D['X'].shape[1]}")
 
     c1, c2 = st.columns(2)
     with c1:
-        st.subheader("Distribucion de clases")
+        st.subheader("Distribución de clases")
         conteo = D["y"].value_counts()
         fig, ax = plt.subplots(figsize=(4, 2.8))
-        ax.bar(conteo.index, conteo.values,
+        ax.bar([trad_clase(k) for k in conteo.index], conteo.values,
                color=[COL.get(k, "#888") for k in conteo.index])
         ax.set_ylabel("Estudiantes")
         for i, v in enumerate(conteo.values):
             ax.text(i, v + 20, str(v), ha="center", fontsize=7)
         st.pyplot(fig, use_container_width=True)
     with c2:
-        st.subheader("Edad en la matricula")
+        st.subheader("Edad en la matrícula")
         fig, ax = plt.subplots(figsize=(4, 2.8))
         ax.hist(D["X"]["Age at enrollment"], bins=25,
                 color="#2980b9", edgecolor="white")
@@ -190,47 +196,47 @@ if seccion == "Exploracion de datos":
         ax.set_ylabel("Frecuencia")
         st.pyplot(fig, use_container_width=True)
 
-    st.subheader("Estadisticas de variables academicas")
-    st.dataframe(D["X"][["Curricular units 1st sem (approved)",
-                         "Curricular units 2nd sem (approved)",
-                         "Curricular units 1st sem (grade)",
-                         "Curricular units 2nd sem (grade)",
-                         "Age at enrollment"]].describe().round(2),
-                 use_container_width=True)
+    st.subheader("Estadísticas de variables académicas")
+    tabla = D["X"][["Curricular units 1st sem (approved)",
+                    "Curricular units 2nd sem (approved)",
+                    "Curricular units 1st sem (grade)",
+                    "Curricular units 2nd sem (grade)",
+                    "Age at enrollment"]].describe().round(2)
+    tabla.columns = [trad(c) for c in tabla.columns]
+    st.dataframe(tabla, use_container_width=True)
 
 
 # ==================================================================
-# SECCION 2: PREDICCION
+# SECCIÓN 2: PREDICCIÓN
 # ==================================================================
-elif seccion == "Prediccion":
-    st.title("Modulo de Prediccion")
-    st.write("Introduce los datos del estudiante para obtener la prediccion "
+elif seccion == "Predicción":
+    st.title("Módulo de Predicción")
+    st.write("Introduce los datos del estudiante para obtener la predicción "
              "de riesgo de abandono.")
 
-    modo = st.radio("Modo de prediccion",
+    modo = st.radio("Modo de predicción",
                     ["Individual", "Carga de CSV (lote)"], horizontal=True)
 
-    # ---------- Modo individual ----------
     if modo == "Individual":
         c1, c2 = st.columns([1, 1])
         with c1:
             st.subheader("Datos del estudiante")
-            edad = st.number_input("Edad en la matricula", 17, 70, 25)
-            genero = st.selectbox("Genero", ["Masculino", "Femenino"])
-            beca = st.selectbox("Becario", ["No", "Si"])
-            matricula = st.selectbox("Matricula al dia", ["No", "Si"])
-            u2 = st.number_input("Unidades aprobadas (2o semestre)", 0, 26, 1)
-            n2 = st.number_input("Calificacion media (2o semestre)", 0.0, 20.0, 8.0)
+            edad = st.number_input("Edad en la matrícula", 17, 70, 25)
+            genero = st.selectbox("Género", ["Masculino", "Femenino"])
+            beca = st.selectbox("Becario", ["No", "Sí"])
+            matricula = st.selectbox("Matrícula al día", ["No", "Sí"])
+            u2 = st.number_input("Unidades aprobadas (2º semestre)", 0, 26, 1)
+            n2 = st.number_input("Calificación media (2º semestre)", 0.0, 20.0, 8.0)
             u1 = st.number_input("Unidades aprobadas (1er semestre)", 0, 26, 2)
-            n1 = st.number_input("Calificacion media (1er semestre)", 0.0, 20.0, 9.0)
-            predecir = st.button("Obtener prediccion", type="primary")
+            n1 = st.number_input("Calificación media (1er semestre)", 0.0, 20.0, 9.0)
+            predecir = st.button("Obtener predicción", type="primary")
 
         if predecir:
             x_esc = vector_estudiante({
                 "Age at enrollment": edad,
                 "Gender": 1 if genero == "Masculino" else 0,
-                "Scholarship holder": 1 if beca == "Si" else 0,
-                "Tuition fees up to date": 1 if matricula == "Si" else 0,
+                "Scholarship holder": 1 if beca == "Sí" else 0,
+                "Tuition fees up to date": 1 if matricula == "Sí" else 0,
                 "Curricular units 2nd sem (approved)": u2,
                 "Curricular units 2nd sem (grade)": n2,
                 "Curricular units 1st sem (approved)": u1,
@@ -263,14 +269,14 @@ elif seccion == "Prediccion":
                         "<h4 style='color:#1e8449;margin:0'>"
                         "SIN RIESGO DETECTADO</h4></div>",
                         unsafe_allow_html=True)
-                st.markdown(f"**Clase predicha: {clase}**")
+                st.markdown(f"**Clase predicha: {trad_clase(clase)}**")
                 for cl, p in zip(le.classes_, proba):
-                    st.write(f"P({cl}): {p:.2f}")
+                    st.write(f"P({trad_clase(cl)}): {p:.2f}")
                     st.progress(float(p))
                 st.caption(f"Modelo: {modelo_sel}")
 
             st.markdown("---")
-            st.subheader("Explicacion SHAP de la prediccion")
+            st.subheader("Explicación SHAP de la predicción")
             try:
                 serie = shap_local(modelo, nombre, x_esc)
                 fig2, ax2 = plt.subplots(figsize=(7, 2.6))
@@ -280,24 +286,23 @@ elif seccion == "Prediccion":
                 ax2.set_yticklabels(serie.index, fontsize=7)
                 ax2.invert_yaxis()
                 ax2.axvline(0, color="gray", linewidth=0.8)
-                ax2.set_xlabel("Valor SHAP (impacto en Dropout)")
+                ax2.set_xlabel("Valor SHAP (impacto en Abandono)")
                 st.pyplot(fig2, use_container_width=True)
-                st.caption("Rojo: variables que aumentan el riesgo de Dropout. "
+                st.caption("Rojo: variables que aumentan el riesgo de abandono. "
                            "Azul: variables que lo reducen.")
             except Exception:
-                st.info("La explicacion SHAP no pudo generarse para este modelo.")
+                st.info("La explicación SHAP no pudo generarse para este modelo.")
 
             st.markdown("---")
             m = D["met"][nombre]
             cm = st.columns(4)
             cm[0].metric("F1-score macro", m["F1-score macro"])
-            cm[1].metric("Recall Dropout", m["Recall Dropout"])
-            cm[2].metric("Precision Dropout", m["Precision Dropout"])
+            cm[1].metric("Recall Abandono", m["Recall Abandono"])
+            cm[2].metric("Precisión Abandono", m["Precisión Abandono"])
             cm[3].metric("AUC-ROC", m["AUC-ROC"])
 
-    # ---------- Modo carga CSV ----------
     else:
-        st.subheader("Prediccion en lote")
+        st.subheader("Predicción en lote")
         st.write("Sube un CSV con las mismas columnas del dataset original "
                  "para predecir varios estudiantes a la vez.")
         archivo = st.file_uploader("Archivo CSV", type=["csv"])
@@ -309,7 +314,7 @@ elif seccion == "Prediccion":
                 modelo, nombre = modelo_obj(modelo_sel)
                 pred = modelo.predict(x_esc)
                 df_res = df.copy()
-                df_res["Prediccion"] = [le.classes_[p] for p in pred]
+                df_res["Predicción"] = [trad_clase(le.classes_[p]) for p in pred]
                 st.dataframe(df_res, use_container_width=True)
                 st.download_button("Descargar resultados",
                                    df_res.to_csv(index=False).encode("utf-8"),
@@ -319,7 +324,7 @@ elif seccion == "Prediccion":
 
 
 # ==================================================================
-# SECCION 3: EXPLICABILIDAD
+# SECCIÓN 3: EXPLICABILIDAD
 # ==================================================================
 elif seccion == "Explicabilidad":
     st.title("Explicabilidad global (SHAP)")
@@ -341,32 +346,35 @@ elif seccion == "Explicabilidad":
             ax.set_xlabel("Importancia media (|SHAP|)")
             st.pyplot(fig, use_container_width=True)
         with c2:
-            st.write("Variables mas influyentes:")
+            st.write("Variables más influyentes:")
             st.dataframe(imp.round(3).rename("Importancia"),
                          use_container_width=True)
     except Exception:
-        st.info("No se pudo generar el grafico SHAP global.")
+        st.info("No se pudo generar el gráfico SHAP global.")
 
 
 # ==================================================================
-# SECCION 4: COMPARATIVA DE MODELOS
+# SECCIÓN 4: COMPARATIVA DE MODELOS
 # ==================================================================
 elif seccion == "Comparativa de modelos":
     st.title("Comparativa de modelos")
-    st.write("Metricas de evaluacion sobre el conjunto de prueba (885 registros).")
+    st.write("Métricas de evaluación sobre el conjunto de prueba (885 registros).")
     st.dataframe(pd.DataFrame(D["met"]).T, use_container_width=True)
 
-    st.subheader("Matrices de confusion")
+    st.subheader("Matrices de confusión")
     c = st.columns(3)
     for col, (nombre, modelo) in zip(
             c, [("Random Forest", D["rf"]), ("XGBoost", D["xgb"]), ("MLP", D["mlp"])]):
         cm = confusion_matrix(D["y_te"], modelo.predict(D["X_te"]))
         fig, ax = plt.subplots(figsize=(2.8, 2.6))
         ax.imshow(cm, cmap="Blues")
+        etiquetas = [trad_clase(c_) for c_ in le.classes_]
         ax.set_xticks(range(3)); ax.set_yticks(range(3))
-        ax.set_xticklabels(le.classes_, fontsize=6, rotation=45, ha="right")
-        ax.set_yticklabels(le.classes_, fontsize=6)
+        ax.set_xticklabels(etiquetas, fontsize=6, rotation=45, ha="right")
+        ax.set_yticklabels(etiquetas, fontsize=6)
         ax.set_title(nombre, fontsize=8)
+        ax.set_xlabel("Predicción", fontsize=7)
+        ax.set_ylabel("Real", fontsize=7)
         for i in range(3):
             for j in range(3):
                 ax.text(j, i, cm[i, j], ha="center", va="center", fontsize=7)
