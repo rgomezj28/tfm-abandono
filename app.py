@@ -18,6 +18,48 @@ st.set_page_config(page_title="Sistema de Prediccion de Abandono Escolar",
 
 # Colores semaforo consistentes en toda la app
 COL = {"Dropout": "#c0392b", "Enrolled": "#f39c12", "Graduate": "#27ae60"}
+
+TRAD = {
+    "Curricular units 2nd sem (approved)": "Unidades aprobadas (2º semestre)",
+    "Curricular units 1st sem (approved)": "Unidades aprobadas (1er semestre)",
+    "Curricular units 2nd sem (grade)": "Calificación media (2º semestre)",
+    "Curricular units 1st sem (grade)": "Calificación media (1er semestre)",
+    "Curricular units 2nd sem (enrolled)": "Unidades matriculadas (2º semestre)",
+    "Curricular units 1st sem (enrolled)": "Unidades matriculadas (1er semestre)",
+    "Curricular units 2nd sem (evaluations)": "Evaluaciones (2º semestre)",
+    "Curricular units 1st sem (evaluations)": "Evaluaciones (1er semestre)",
+    "Curricular units 2nd sem (credited)": "Unidades convalidadas (2º semestre)",
+    "Curricular units 1st sem (credited)": "Unidades convalidadas (1er semestre)",
+    "Curricular units 2nd sem (without evaluations)": "Unidades sin evaluar (2º semestre)",
+    "Curricular units 1st sem (without evaluations)": "Unidades sin evaluar (1er semestre)",
+    "Tuition fees up to date": "Matrícula al día",
+    "Course": "Titulación",
+    "Age at enrollment": "Edad en la matrícula",
+    "Scholarship holder": "Becario",
+    "Gender": "Género",
+    "Unemployment rate": "Tasa de desempleo",
+    "Inflation rate": "Tasa de inflación",
+    "GDP": "PIB",
+    "Admission grade": "Nota de admisión",
+    "Displaced": "Desplazado",
+    "Debtor": "Deudor",
+    "Mother's occupation": "Ocupación de la madre",
+    "Father's occupation": "Ocupación del padre",
+    "Mother's qualification": "Nivel educativo de la madre",
+    "Father's qualification": "Nivel educativo del padre",
+    "Previous qualification (grade)": "Nota de cualificación previa",
+    "Previous qualification": "Cualificación previa",
+    "Application mode": "Modo de solicitud",
+    "Application order": "Orden de solicitud",
+    "Marital Status": "Estado civil",
+    "Nacionality": "Nacionalidad",
+    "International": "Internacional",
+    "Daytime/evening attendance": "Asistencia diurna/nocturna",
+    "Educational special needs": "Necesidades educativas especiales",
+}
+def trad(nombre):
+    return TRAD.get(nombre, nombre)
+
 plt.rcParams.update({"font.size": 8, "axes.titlesize": 9, "figure.dpi": 110})
 
 # ------------------------------------------------------------------
@@ -288,7 +330,7 @@ elif seccion == "Explicabilidad":
         sv = expl.shap_values(D["X_te"])
         sv_dp = sv[:, :, D["idx_dp"]] if np.array(sv).ndim == 3 else sv[D["idx_dp"]]
         imp = pd.Series(np.abs(sv_dp).mean(axis=0),
-                        index=cols).sort_values(ascending=False).head(10)
+                        index=[trad(c) for c in cols]).sort_values(ascending=False).head(10)
         c1, c2 = st.columns([3, 2])
         with c1:
             fig, ax = plt.subplots(figsize=(6, 3.8))
