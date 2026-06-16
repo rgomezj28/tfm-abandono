@@ -2,15 +2,8 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from ucimlrepo import fetch_ucirepo
-from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.neural_network import MLPClassifier
-from sklearn.metrics import (f1_score, recall_score, precision_score,
-                             roc_auc_score, confusion_matrix)
-from xgboost import XGBClassifier
-from imblearn.over_sampling import SMOTE
+import joblib
+from sklearn.metrics import confusion_matrix
 import shap
 
 st.set_page_config(page_title="Sistema de Predicción de Abandono Escolar",
@@ -19,7 +12,6 @@ st.set_page_config(page_title="Sistema de Predicción de Abandono Escolar",
 COL = {"Dropout": "#c0392b", "Enrolled": "#f39c12", "Graduate": "#27ae60"}
 plt.rcParams.update({"font.size": 8, "axes.titlesize": 9, "figure.dpi": 110})
 
-# Traduccion de nombres de variables a castellano (solo para mostrar)
 TRAD = {
     "Curricular units 2nd sem (approved)": "Unidades aprobadas (2º semestre)",
     "Curricular units 1st sem (approved)": "Unidades aprobadas (1er semestre)",
@@ -60,42 +52,23 @@ TRAD = {
 }
 TRAD_CLASE = {"Dropout": "Abandono", "Enrolled": "Matriculado", "Graduate": "Graduado"}
 
-def trad(nombre):
-    return TRAD.get(nombre, nombre)
-
-def trad_clase(c):
-    return TRAD_CLASE.get(c, c)
+def trad(n): return TRAD.get(n, n)
+def trad_clase(c): return TRAD_CLASE.get(c, c)
 
 
-# ------------------------------------------------------------------
-# Carga de datos, preprocesamiento y entrenamiento (una sola vez)
-# ------------------------------------------------------------------
 @st.cache_resource
-def preparar_todo():
-    datos = fetch_ucirepo(id=697)
-    X = datos.data.features
-    y = datos.data.targets["Target"]
-    cols = list(X.columns)
-
-    le = LabelEncoder()
-    y_cod = le.fit_transform(y)
-    scaler = StandardScaler()
-    X_esc = scaler.fit_transform(X)
-
-    X_tr, X_te, y_tr, y_te = train_test_split(
-        X_esc, y_cod, test_size=0.20, stratify=y_cod, random_state=42)
-    X_bal, y_bal = SMOTE(random_state=42).fit_resample(X_tr, y_tr)
-
-    rf = RandomForestClassifier(n_estimators=100, random_state=42).fit(X_bal, y_bal)
-    xgb = XGBClassifier(n_estimators=100, max_depth=6, learning_rate=0.1,
-                        eval_metric="mlogloss", random_state=42).fit(X_bal, y_bal)
-    mlp = MLPClassifier(hidden_layer_sizes=(128, 64), activation="relu",
-                        alpha=0.001, max_iter=1000, early_stopping=False,
-                        n_iter_no_change=50, tol=1e-4,
-                        solver="adam", random_state=42).fit(X_bal, y_bal)
-
+def cargar_todo():
+    rf = joblib.load("modelo_rf.joblib")
+    xgb = joblib.load("modelo_xgb.joblib")
+    mlp = joblib.load("modelo_mlp.joblib")
+    scaler = joblib.load("scaler.joblib")
+    le = joblib.load("label_encoder.joblib")
+    cols = joblib.load("columnas.joblib")
+    X_te, y_te = joblib.load("test_data.joblib")
     idx_dp = list(le.classes_).index("Dropout")
 
+    from sklearn.metrics import (f1_score, recall_score,
+                                 precision_score, roc_auc_score)
     def metricas(modelo):
         pred = modelo.predict(X_te)
         proba = modelo.predict_proba(X_te)
@@ -108,24 +81,25 @@ def preparar_todo():
             "AUC-ROC": round(roc_auc_score(y_te, proba, multi_class="ovr",
                                            average="macro"), 2),
         }
+    met = {"Random Forest": metricas(rf), "XGBoost": metricas(xgb), "MLP": metricas(mlp)}
 
-    met = {"Random Forest": metricas(rf),
-           "XGBoost": metricas(xgb),
-           "MLP": metricas(mlp)}
+    # Para exploración de datos se necesita el dataset original
+    from ucimlrepo import fetch_ucirepo
+    datos = fetch_ucirepo(id=697)
+    X = datos.data.features
+    y = datos.data.targets["Target"]
 
     return {"X": X, "y": y, "cols": cols, "le": le, "scaler": scaler,
             "rf": rf, "xgb": xgb, "mlp": mlp, "met": met,
             "X_te": X_te, "y_te": y_te, "idx_dp": idx_dp}
 
-D = preparar_todo()
+D = cargar_todo()
 cols, le, scaler = D["cols"], D["le"], D["scaler"]
 
 
 def modelo_obj(sel):
-    if sel.startswith("Random"):
-        return D["rf"], "Random Forest"
-    if sel.startswith("XGBoost"):
-        return D["xgb"], "XGBoost"
+    if sel.startswith("Random"): return D["rf"], "Random Forest"
+    if sel.startswith("XGBoost"): return D["xgb"], "XGBoost"
     return D["mlp"], "MLP"
 
 
