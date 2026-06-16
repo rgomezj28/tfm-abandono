@@ -90,7 +90,9 @@ def preparar_todo():
     xgb = XGBClassifier(n_estimators=100, max_depth=6, learning_rate=0.1,
                         eval_metric="mlogloss", random_state=42).fit(X_bal, y_bal)
     mlp = MLPClassifier(hidden_layer_sizes=(128, 64), activation="relu",
-                        alpha=0.001, max_iter=300, random_state=42).fit(X_bal, y_bal)
+                        alpha=0.001, max_iter=1000, early_stopping=False,
+                        n_iter_no_change=50, tol=1e-4,
+                        solver="adam", random_state=42).fit(X_bal, y_bal)
 
     idx_dp = list(le.classes_).index("Dropout")
 
