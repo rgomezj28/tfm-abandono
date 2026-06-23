@@ -8,3 +8,4 @@ imbalanced-learn
 shap
 ucimlrepo
 joblib
+tensorflow-cpu==2.20.0
